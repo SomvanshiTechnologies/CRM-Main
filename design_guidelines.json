@@ -1,0 +1,146 @@
+{
+  "project_name": "Somvanshi CRM",
+  "design_philosophy": {
+    "identity": "E1: The Anti-AI Designer",
+    "core_principles": [
+      "Fusion over Imitation: Mix 'Performance Pro' athleticism with 'Swiss' precision.",
+      "Emotion First: The CRM must feel 'Fast' and 'Authoritative'. No lag, no clutter.",
+      "Content is King: Data is the hero. Remove all unnecessary chrome/borders.",
+      "Negative Space: Use 'p-6' or 'p-8' padding to let data breathe.",
+      "Contrast: High contrast for readability. Vital for sales data."
+    ],
+    "anti_patterns": [
+      "Purple/Teal primary buttons (Use Indigo/Obsidian instead)",
+      "Inter for Headings (Use Plus Jakarta Sans)",
+      "Centered Everything (Use Asymmetry/Z-Pattern)",
+      "Gradient Overload (Keep it flat and clean)",
+      "AI Slop: Generic rounded corners everywhere (Use tighter radii for precision)"
+    ]
+  },
+  "typography": {
+    "font_family": {
+      "headings": "Plus Jakarta Sans, sans-serif",
+      "body": "Inter, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "scale": {
+      "h1": "text-4xl font-bold tracking-tight lg:text-5xl",
+      "h2": "text-3xl font-semibold tracking-tight",
+      "h3": "text-2xl font-semibold tracking-tight",
+      "h4": "text-xl font-semibold tracking-tight",
+      "p": "text-base leading-7 text-muted-foreground",
+      "small": "text-sm font-medium leading-none"
+    },
+    "rules": [
+      "Headings must use 'Plus Jakarta Sans'.",
+      "Data tables must use 'Inter' with tabular-nums feature for alignment.",
+      "Labels must be uppercase, text-xs, font-bold, tracking-wider."
+    ]
+  },
+  "colors": {
+    "theme": "light",
+    "palette": {
+      "primary": {
+        "name": "Deep Obsidian",
+        "value": "hsl(222.2 47.4% 11.2%)",
+        "tailwind": "bg-slate-900 text-white hover:bg-slate-800"
+      },
+      "secondary": {
+        "name": "Off White",
+        "value": "hsl(210 40% 96.1%)",
+        "tailwind": "bg-slate-100 text-slate-900 hover:bg-slate-200"
+      },
+      "accent": {
+        "name": "Electric Indigo",
+        "value": "#4F46E5",
+        "tailwind": "bg-indigo-600 text-white hover:bg-indigo-700"
+      },
+      "background": {
+        "page": "#FFFFFF",
+        "surface": "#F8FAFC",
+        "subtle": "#F1F5F9"
+      },
+      "status": {
+        "won": "text-emerald-700 bg-emerald-50 border-emerald-200",
+        "lost": "text-rose-700 bg-rose-50 border-rose-200",
+        "negotiation": "text-amber-700 bg-amber-50 border-amber-200",
+        "contacted": "text-blue-700 bg-blue-50 border-blue-200",
+        "new": "text-slate-700 bg-slate-100 border-slate-200"
+      }
+    }
+  },
+  "layout_strategy": {
+    "spacing": {
+      "container_padding": "p-6 md:p-8 lg:p-12",
+      "section_gap": "gap-8",
+      "card_padding": "p-6"
+    },
+    "grid_system": {
+      "dashboard": "grid grid-cols-1 md:grid-cols-4 gap-6",
+      "bento_hero": "col-span-1 md:col-span-2 row-span-2",
+      "bento_tall": "col-span-1 row-span-2",
+      "bento_standard": "col-span-1"
+    },
+    "containers": {
+      "dashboard_card": "bg-white border border-slate-200 shadow-sm rounded-lg",
+      "pipeline_column": "bg-slate-50/50 min-w-[300px] w-[300px] rounded-xl p-4 border border-slate-100 h-full flex flex-col",
+      "pipeline_card": "bg-white p-4 rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing mb-3"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-slate-900 text-white hover:bg-slate-800 shadow-sm h-10 px-4 py-2 rounded-md font-medium transition-all active:scale-95",
+      "secondary": "bg-white text-slate-900 border border-slate-200 hover:bg-slate-50 shadow-sm h-10 px-4 py-2 rounded-md font-medium",
+      "ghost": "hover:bg-slate-100 hover:text-slate-900 text-slate-600 h-10 px-4 py-2 rounded-md font-medium",
+      "destructive": "bg-rose-600 text-white hover:bg-rose-700 shadow-sm h-10 px-4 py-2 rounded-md font-medium"
+    },
+    "cards": {
+      "default": "rounded-xl border border-slate-200 bg-white text-slate-950 shadow-sm",
+      "hover_effect": "hover:border-slate-300 transition-colors"
+    },
+    "inputs": {
+      "default": "flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+    },
+    "charts": {
+      "library": "recharts",
+      "theme": "minimal",
+      "colors": ["#0f172a", "#4f46e5", "#10b981", "#f59e0b", "#ef4444"]
+    }
+  },
+  "images": {
+    "avatars": {
+      "ameya": "https://images.unsplash.com/photo-1576558656222-ba66febe3dec?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzR8MHwxfHNlYXJjaHwyfHxwcm9mZXNzaW9uYWwlMjBidXNpbmVzcyUyMGhlYWRzaG90JTIwcG9ydHJhaXR8ZW58MHx8fHwxNzczMzIwMDA1fDA&ixlib=rb-4.1.0&q=85",
+      "rajdeep": "https://images.unsplash.com/photo-1655249493799-9cee4fe983bb?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzR8MHwxfHNlYXJjaHwzfHxwcm9mZXNzaW9uYWwlMjBidXNpbmVzcyUyMGhlYWRzaG90JTIwcG9ydHJhaXR8ZW58MHx8fHwxNzczMzIwMDA1fDA&ixlib=rb-4.1.0&q=85",
+      "ishaan": "https://images.unsplash.com/photo-1689600944138-da3b150d9cb8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzR8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBidXNpbmVzcyUyMGhlYWRzaG90JTIwcG9ydHJhaXR8ZW58MHx8fHwxNzczMzIwMDA1fDA&ixlib=rb-4.1.0&q=85",
+      "bhargavi": "https://images.unsplash.com/photo-1655249481446-25d575f1c054?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzR8MHwxfHNlYXJjaHw0fHxwcm9mZXNzaW9uYWwlMjBidXNpbmVzcyUyMGhlYWRzaG90JTIwcG9ydHJhaXR8ZW58MHx8fHwxNzczMzIwMDA1fDA&ixlib=rb-4.1.0&q=85"
+    }
+  },
+  "motion": {
+    "guidelines": [
+      "Use 'framer-motion' for complex interactions.",
+      "Transition: 'transition-all duration-200 ease-in-out' for simple hover states.",
+      "Pipeline Drag: Smooth layout animations using 'framer-motion' LayoutGroup.",
+      "Micro-interactions: Buttons scale down to 0.98 on click."
+    ]
+  },
+  "accessibility": {
+    "contrast": "Ensure text is slate-600 or darker on white backgrounds.",
+    "focus_states": "Visible focus rings (ring-2 ring-slate-950) are mandatory.",
+    "aria": "All interactive elements must have aria-labels if no text is present."
+  },
+  "universal_guidelines": [
+    "Do not use generic 'AI slop' rounded corners (use consistent radii).",
+    "Avoid gradients for backgrounds unless it's a subtle 'noise' texture.",
+    "Data-testid attributes are mandatory for all interactive elements.",
+    "Use 'sonner' for all toast notifications.",
+    "Tables should have sticky headers and row hover effects.",
+    "Sidebar should be collapsible to maximize workspace."
+  ],
+  "instructions_to_main_agent": [
+    "1. Setup 'Plus Jakarta Sans' font immediately.",
+    "2. Configure Tailwind colors to match the 'Performance Pro' palette.",
+    "3. Build the 'Dashboard' using the Bento Grid strategy.",
+    "4. Implement the 'Kanban Board' with drag-and-drop (use @hello-pangea/dnd or dnd-kit).",
+    "5. Ensure the 'Reports' page uses Recharts with the specified minimal theme."
+  ]
+}

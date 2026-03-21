@@ -1,0 +1,201 @@
+/* ─── Somvanshi CRM – Professional Theme ─────────────────────────────────── */
+
+:root {
+  --brand-blue: #1978B8;
+  --brand-blue-dark: #155f93;
+  --brand-blue-light: #EBF5FB;
+  --brand-blue-border: #C5DFF0;
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --bg-page: #F8FAFC;
+  --border-color: #E2E8F0;
+}
+
+/* ─── Typography ─────────────────────────────────────────────────────────── */
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background-color: var(--bg-page);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Sidebar ────────────────────────────────────────────────────────────── */
+.sidebar {
+  transition: width 0.25s ease;
+}
+
+/* ─── Cards ──────────────────────────────────────────────────────────────── */
+.card-hover {
+  transition: box-shadow 0.2s ease, transform 0.1s ease;
+}
+.card-hover:hover {
+  box-shadow: 0 4px 16px rgba(25, 120, 184, 0.10);
+  transform: translateY(-1px);
+}
+
+/* ─── Stat cards decorative corner ──────────────────────────────────────── */
+.stat-card {
+  position: relative;
+  overflow: hidden;
+}
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 80px;
+  height: 80px;
+  background: linear-gradient(135deg, transparent 50%, rgba(25, 120, 184, 0.06) 50%);
+  border-radius: 0 0 0 80%;
+}
+
+/* ─── Blue top accent on stat cards ─────────────────────────────────────── */
+.stat-card-accent {
+  border-top: 3px solid var(--brand-blue) !important;
+}
+
+/* ─── Pipeline columns ───────────────────────────────────────────────────── */
+.pipeline-column {
+  min-height: calc(100vh - 220px);
+}
+
+/* ─── Activity timeline ──────────────────────────────────────────────────── */
+.activity-timeline {
+  position: relative;
+}
+.activity-timeline::before {
+  content: '';
+  position: absolute;
+  left: 12px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--brand-blue-border);
+}
+.activity-item {
+  position: relative;
+  padding-left: 36px;
+}
+.activity-item::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 6px;
+  width: 10px;
+  height: 10px;
+  background: white;
+  border: 2px solid var(--brand-blue);
+  border-radius: 50%;
+}
+
+/* ─── Table ──────────────────────────────────────────────────────────────── */
+.data-table {
+  font-variant-numeric: tabular-nums;
+}
+.data-table tr {
+  transition: background-color 0.12s ease;
+}
+.data-table tr:hover {
+  background-color: #F0F7FD;
+}
+
+/* ─── Table header ───────────────────────────────────────────────────────── */
+.data-table thead tr {
+  background-color: #F1F7FB;
+  border-bottom: 2px solid var(--brand-blue-border);
+}
+.data-table thead th {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ─── Primary button override ────────────────────────────────────────────── */
+.btn-primary {
+  background-color: var(--brand-blue);
+  color: #fff;
+  border: none;
+}
+.btn-primary:hover {
+  background-color: var(--brand-blue-dark);
+}
+
+/* ─── Notification badge ─────────────────────────────────────────────────── */
+.notification-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  background: #EF4444;
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  padding: 0 4px;
+}
+
+/* ─── Loading skeleton ───────────────────────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, #F1F5F9 25%, #E8F1F8 50%, #F1F5F9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ─── Fade-in animation ──────────────────────────────────────────────────── */
+.animate-fade-in {
+  animation: fadeIn 0.25s ease;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Lead detail slide-in ───────────────────────────────────────────────── */
+.lead-detail-panel {
+  animation: slideInRight 0.25s ease;
+}
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ─── Section divider ────────────────────────────────────────────────────── */
+.section-header {
+  border-left: 4px solid var(--brand-blue);
+  padding-left: 10px;
+}
+
+/* ─── Toast ──────────────────────────────────────────────────────────────── */
+[data-sonner-toast] {
+  font-family: 'Inter', sans-serif;
+}
+
+/* ─── Mobile ─────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    z-index: 50;
+    height: 100vh;
+  }
+}
+
+/* ─── Print ──────────────────────────────────────────────────────────────── */
+@media print {
+  .no-print { display: none !important; }
+  .print-break { page-break-before: always; }
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #F1F5F9; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--brand-blue); }
