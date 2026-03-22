@@ -85,18 +85,16 @@ def get_level_info(xp: int) -> dict:
 
 async def award_xp(user_id: str, action_type: str, reference_id: str):
     """Award XP for an action with deduplication via xp_events collection."""
-    # Check for duplicate event
     existing = await db.xp_events.find_one(
         {"user_id": user_id, "action_type": action_type, "reference_id": reference_id}
     )
     if existing:
-        return  # Already awarded — skip
+        return
 
     xp_amount = XP_VALUES.get(action_type, 0)
     if xp_amount == 0:
         return
 
-    # Record the event
     await db.xp_events.insert_one({
         "id": str(uuid.uuid4()),
         "user_id": user_id,
@@ -106,7 +104,6 @@ async def award_xp(user_id: str, action_type: str, reference_id: str):
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
 
-    # Increment XP and recalculate level
     await db.users.update_one({"id": user_id}, {"$inc": {"xp": xp_amount}})
     updated_user = await db.users.find_one({"id": user_id}, {"_id": 0, "xp": 1})
     new_xp = updated_user.get("xp", 0) if updated_user else 0
@@ -412,7 +409,6 @@ async def login(request: LoginRequest):
     user = await db.users.find_one({"email": request.email}, {"_id": 0})
     if not user or not verify_password(request.password, user["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    
     token = create_token(user["id"], user["role"])
     return LoginResponse(
         token=token,
@@ -477,7 +473,6 @@ async def upload_avatar(request: Request, file: UploadFile = File(...), user: di
     if len(content) > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Image must be smaller than 5 MB")
 
-    # Delete previous uploaded avatar (if it was a local upload)
     old_avatar = user.get("avatar_url", "")
     if old_avatar and "/uploads/avatars/" in old_avatar:
         old_filename = old_avatar.split("/uploads/avatars/")[-1]
@@ -552,11 +547,9 @@ async def delete_user(user_id: str, admin: dict = Depends(get_admin_user)):
 async def create_lead(lead: LeadCreate, user: dict = Depends(get_current_user)):
     lead_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
-    
     owner_id = lead.owner_id or user["id"]
     owner = await db.users.find_one({"id": owner_id}, {"_id": 0, "name": 1})
     owner_name = owner["name"] if owner else None
-    
     lead_doc = {
         "id": lead_id,
         **lead.model_dump(),
@@ -567,51 +560,30 @@ async def create_lead(lead: LeadCreate, user: dict = Depends(get_current_user)):
         "updated_at": now,
         "created_by": user["id"]
     }
-    
     await db.leads.insert_one(lead_doc)
-
-    # Award XP for creating a lead (to the owner)
     await award_xp(owner_id, "lead_created", lead_id)
-
-    # Create notification for lead owner if assigned to someone else
     if lead.owner_id and lead.owner_id != user["id"]:
         await create_notification(
-            lead.owner_id,
-            NotificationType.LEAD_ASSIGNED,
-            "New Lead Assigned",
-            f"You have been assigned a new lead: {lead.company_name}",
-            lead_id
+            lead.owner_id, NotificationType.LEAD_ASSIGNED,
+            "New Lead Assigned", f"You have been assigned a new lead: {lead.company_name}", lead_id
         )
-    
     return LeadResponse(**{**lead_doc, "owner_name": owner_name})
 
 @api_router.get("/leads", response_model=List[LeadResponse])
-async def get_leads(
-    stage: Optional[str] = None,
-    owner_id: Optional[str] = None,
-    user: dict = Depends(get_current_user)
-):
+async def get_leads(stage: Optional[str] = None, owner_id: Optional[str] = None, user: dict = Depends(get_current_user)):
     query = {"is_deleted": {"$ne": True}}
-
-    # Sales users can only see their own leads
     if user["role"] == UserRole.SALES.value:
         query["owner_id"] = user["id"]
     elif owner_id:
         query["owner_id"] = owner_id
-
     if stage:
         query["stage"] = stage
-
     leads = await db.leads.find(query, {"_id": 0}).sort("updated_at", -1).to_list(1000)
-    
-    # Add owner names
     user_ids = list(set(l.get("owner_id") for l in leads if l.get("owner_id")))
     users = await db.users.find({"id": {"$in": user_ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(100)
     user_map = {u["id"]: u["name"] for u in users}
-    
     for lead in leads:
         lead["owner_name"] = user_map.get(lead.get("owner_id"))
-    
     return [LeadResponse(**l) for l in leads]
 
 @api_router.get("/leads/{lead_id}", response_model=LeadResponse)
@@ -619,14 +591,10 @@ async def get_lead(lead_id: str, user: dict = Depends(get_current_user)):
     lead = await db.leads.find_one({"id": lead_id, "is_deleted": {"$ne": True}}, {"_id": 0})
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
-
-    # Check access
     if user["role"] == UserRole.SALES.value and lead.get("owner_id") != user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
-
     owner = await db.users.find_one({"id": lead.get("owner_id")}, {"_id": 0, "name": 1})
     lead["owner_name"] = owner["name"] if owner else None
-
     return LeadResponse(**lead)
 
 @api_router.put("/leads/{lead_id}", response_model=LeadResponse)
@@ -634,49 +602,32 @@ async def update_lead(lead_id: str, update: LeadUpdate, user: dict = Depends(get
     lead = await db.leads.find_one({"id": lead_id, "is_deleted": {"$ne": True}}, {"_id": 0})
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
-
-    # Check access
     if user["role"] == UserRole.SALES.value and lead.get("owner_id") != user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
-
     update_data = {k: v for k, v in update.model_dump().items() if v is not None}
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    
-    # Track stage changes for XP
     old_stage = lead.get("stage")
     stage_changed = update.stage is not None and update.stage.value != old_stage
-
-    # Handle stage change to Closed Won
     if update.stage == LeadStage.CLOSED_WON and lead.get("stage") != LeadStage.CLOSED_WON.value:
         if update.final_value:
             update_data["final_value"] = update.final_value
         elif not lead.get("final_value"):
             update_data["final_value"] = lead.get("estimated_value", 0)
-
-        # Notify admin
         admins = await db.users.find({"role": UserRole.ADMIN.value}, {"_id": 0, "id": 1}).to_list(10)
         for admin in admins:
             await create_notification(
-                admin["id"],
-                NotificationType.DEAL_WON,
-                "Deal Closed Won!",
-                f"{lead['company_name']} deal closed by {user['name']}",
-                lead_id
+                admin["id"], NotificationType.DEAL_WON, "Deal Closed Won!",
+                f"{lead['company_name']} deal closed by {user['name']}", lead_id
             )
-
     await db.leads.update_one({"id": lead_id}, {"$set": update_data})
-
-    # Award XP for stage updates
     lead_owner_id = lead.get("owner_id") or user["id"]
     if stage_changed:
         await award_xp(lead_owner_id, "stage_updated", f"{lead_id}:{update.stage.value}")
     if update.stage == LeadStage.CLOSED_WON and old_stage != LeadStage.CLOSED_WON.value:
         await award_xp(lead_owner_id, "deal_closed", lead_id)
-
     updated_lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
     owner = await db.users.find_one({"id": updated_lead.get("owner_id")}, {"_id": 0, "name": 1})
     updated_lead["owner_name"] = owner["name"] if owner else None
-    
     return LeadResponse(**updated_lead)
 
 @api_router.put("/leads/{lead_id}/stage")
@@ -684,46 +635,29 @@ async def update_lead_stage(lead_id: str, stage: LeadStage, user: dict = Depends
     return await update_lead(lead_id, LeadUpdate(stage=stage), user)
 
 @api_router.delete("/leads/{lead_id}")
-async def delete_lead(
-    lead_id: str,
-    reason: Optional[str] = None,
-    user: dict = Depends(get_current_user)
-):
+async def delete_lead(lead_id: str, reason: Optional[str] = None, user: dict = Depends(get_current_user)):
     lead = await db.leads.find_one({"id": lead_id, "is_deleted": {"$ne": True}}, {"_id": 0})
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
-
-    # Admins can delete any lead; sales reps can only delete their own assigned leads
     if user["role"] == UserRole.SALES.value and lead.get("owner_id") != user["id"]:
         raise HTTPException(status_code=403, detail="You can only delete leads assigned to you")
-
     now = datetime.now(timezone.utc).isoformat()
     await db.leads.update_one(
         {"id": lead_id},
-        {"$set": {
-            "is_deleted": True,
-            "deleted_at": now,
-            "deleted_by": user["id"],
-            "delete_reason": reason,
-            "updated_at": now
-        }}
+        {"$set": {"is_deleted": True, "deleted_at": now, "deleted_by": user["id"], "delete_reason": reason, "updated_at": now}}
     )
     return {"message": "Lead deleted successfully"}
 
 # ==================== ACTIVITY ROUTES ====================
 @api_router.post("/activities", response_model=ActivityResponse)
 async def create_activity(activity: ActivityCreate, user: dict = Depends(get_current_user)):
-    # Verify lead exists and user has access
     lead = await db.leads.find_one({"id": activity.lead_id, "is_deleted": {"$ne": True}}, {"_id": 0})
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
-    
     if user["role"] == UserRole.SALES.value and lead.get("owner_id") != user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
-    
     activity_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
-    
     activity_doc = {
         "id": activity_id,
         "lead_id": activity.lead_id,
@@ -735,36 +669,22 @@ async def create_activity(activity: ActivityCreate, user: dict = Depends(get_cur
         "completed": activity.scheduled_at is None,
         "created_at": now
     }
-    
     await db.activities.insert_one(activity_doc)
-
-    # Award XP for logging an activity
     await award_xp(user["id"], "activity_logged", activity_id)
-
-    # Create follow-up reminder notification
     if activity.scheduled_at and activity.activity_type == ActivityType.FOLLOW_UP:
         await create_notification(
-            user["id"],
-            NotificationType.FOLLOW_UP_REMINDER,
-            "Follow-up Reminder",
-            f"Follow-up scheduled for {lead['company_name']}",
-            activity.lead_id
+            user["id"], NotificationType.FOLLOW_UP_REMINDER,
+            "Follow-up Reminder", f"Follow-up scheduled for {lead['company_name']}", activity.lead_id
         )
-    
     return ActivityResponse(**activity_doc)
 
 @api_router.get("/activities", response_model=List[ActivityResponse])
-async def get_activities(
-    lead_id: Optional[str] = None,
-    user: dict = Depends(get_current_user)
-):
+async def get_activities(lead_id: Optional[str] = None, user: dict = Depends(get_current_user)):
     query = {}
     if lead_id:
         query["lead_id"] = lead_id
-    
     if user["role"] == UserRole.SALES.value:
         query["user_id"] = user["id"]
-    
     activities = await db.activities.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
     return [ActivityResponse(**a) for a in activities]
 
@@ -784,13 +704,10 @@ async def create_meeting(meeting: MeetingCreate, user: dict = Depends(get_curren
     lead = await db.leads.find_one({"id": meeting.lead_id, "is_deleted": {"$ne": True}}, {"_id": 0})
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
-    
     if user["role"] == UserRole.SALES.value and lead.get("owner_id") != user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
-    
     meeting_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
-    
     meeting_doc = {
         "id": meeting_id,
         "lead_id": meeting.lead_id,
@@ -805,40 +722,24 @@ async def create_meeting(meeting: MeetingCreate, user: dict = Depends(get_curren
         "completed": False,
         "created_at": now
     }
-    
     await db.meetings.insert_one(meeting_doc)
-
-    # Award XP for booking a meeting
     await award_xp(user["id"], "meeting_booked", meeting_id)
-
-    # Create meeting notification
     await create_notification(
-        user["id"],
-        NotificationType.MEETING_ALERT,
-        "Meeting Scheduled",
-        f"Meeting with {lead['company_name']} on {meeting.scheduled_at}",
-        meeting.lead_id
+        user["id"], NotificationType.MEETING_ALERT, "Meeting Scheduled",
+        f"Meeting with {lead['company_name']} on {meeting.scheduled_at}", meeting.lead_id
     )
-    
     return MeetingResponse(**meeting_doc)
 
 @api_router.get("/meetings", response_model=List[MeetingResponse])
-async def get_meetings(
-    lead_id: Optional[str] = None,
-    upcoming: bool = False,
-    user: dict = Depends(get_current_user)
-):
+async def get_meetings(lead_id: Optional[str] = None, upcoming: bool = False, user: dict = Depends(get_current_user)):
     query = {}
     if lead_id:
         query["lead_id"] = lead_id
-    
     if user["role"] == UserRole.SALES.value:
         query["user_id"] = user["id"]
-    
     if upcoming:
         query["completed"] = False
         query["scheduled_at"] = {"$gte": datetime.now(timezone.utc).isoformat()}
-    
     meetings = await db.meetings.find(query, {"_id": 0}).sort("scheduled_at", 1).to_list(500)
     return [MeetingResponse(**m) for m in meetings]
 
@@ -847,16 +748,12 @@ async def update_meeting(meeting_id: str, update: MeetingUpdate, user: dict = De
     meeting = await db.meetings.find_one({"id": meeting_id}, {"_id": 0})
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    
     if user["role"] == UserRole.SALES.value and meeting.get("user_id") != user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
-    
     update_data = {k: v for k, v in update.model_dump().items() if v is not None}
     if "meeting_type" in update_data:
         update_data["meeting_type"] = update_data["meeting_type"].value
-    
     await db.meetings.update_one({"id": meeting_id}, {"$set": update_data})
-    
     updated = await db.meetings.find_one({"id": meeting_id}, {"_id": 0})
     return MeetingResponse(**updated)
 
@@ -876,25 +773,20 @@ async def create_notification(user_id: str, notification_type: NotificationType,
 
 @api_router.get("/notifications", response_model=List[NotificationResponse])
 async def get_notifications(user: dict = Depends(get_current_user)):
-    notifications = await db.notifications.find(
-        {"user_id": user["id"]},
-        {"_id": 0}
-    ).sort("created_at", -1).to_list(50)
+    notifications = await db.notifications.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(50)
     return [NotificationResponse(**n) for n in notifications]
 
 @api_router.put("/notifications/{notification_id}/read")
 async def mark_notification_read(notification_id: str, user: dict = Depends(get_current_user)):
     await db.notifications.update_one(
-        {"id": notification_id, "user_id": user["id"]},
-        {"$set": {"read": True}}
+        {"id": notification_id, "user_id": user["id"]}, {"$set": {"read": True}}
     )
     return {"message": "Notification marked as read"}
 
 @api_router.put("/notifications/read-all")
 async def mark_all_notifications_read(user: dict = Depends(get_current_user)):
     await db.notifications.update_many(
-        {"user_id": user["id"], "read": False},
-        {"$set": {"read": True}}
+        {"user_id": user["id"], "read": False}, {"$set": {"read": True}}
     )
     return {"message": "All notifications marked as read"}
 
@@ -904,94 +796,65 @@ async def get_dashboard_stats(user: dict = Depends(get_current_user)):
     query = {"is_deleted": {"$ne": True}}
     if user["role"] == UserRole.SALES.value:
         query["owner_id"] = user["id"]
-
     leads = await db.leads.find(query, {"_id": 0}).to_list(10000)
-
     total_leads = len(leads)
     leads_by_stage = {}
     for stage in LeadStage:
         leads_by_stage[stage.value] = len([l for l in leads if l.get("stage") == stage.value])
-    
     total_pipeline_value = sum(l.get("estimated_value", 0) for l in leads if l.get("stage") not in [LeadStage.CLOSED_WON.value, LeadStage.CLOSED_LOST.value])
     closed_won_leads = [l for l in leads if l.get("stage") == LeadStage.CLOSED_WON.value]
     closed_revenue = sum(l.get("final_value") or l.get("estimated_value", 0) for l in closed_won_leads)
     expected_revenue = sum(l.get("estimated_value", 0) for l in leads if l.get("stage") == LeadStage.NEGOTIATION.value)
-    
     meetings_query = {} if user["role"] == UserRole.ADMIN.value else {"user_id": user["id"]}
     meetings_count = await db.meetings.count_documents(meetings_query)
-    
     deals_closed_won = len(closed_won_leads)
     deals_closed_lost = len([l for l in leads if l.get("stage") == LeadStage.CLOSED_LOST.value])
     total_closed = deals_closed_won + deals_closed_lost
     conversion_rate = (deals_closed_won / total_closed * 100) if total_closed > 0 else 0
-    
     return DashboardStats(
-        total_leads=total_leads,
-        leads_by_stage=leads_by_stage,
-        total_pipeline_value=total_pipeline_value,
-        closed_revenue=closed_revenue,
-        expected_revenue=expected_revenue,
-        meetings_booked=meetings_count,
+        total_leads=total_leads, leads_by_stage=leads_by_stage,
+        total_pipeline_value=total_pipeline_value, closed_revenue=closed_revenue,
+        expected_revenue=expected_revenue, meetings_booked=meetings_count,
         conversion_rate=round(conversion_rate, 1),
-        deals_closed_won=deals_closed_won,
-        deals_closed_lost=deals_closed_lost
+        deals_closed_won=deals_closed_won, deals_closed_lost=deals_closed_lost
     )
 
 @api_router.get("/dashboard/performance", response_model=List[SalespersonPerformance])
 async def get_team_performance(user: dict = Depends(get_admin_user)):
     sales_users = await db.users.find({"role": UserRole.SALES.value}, {"_id": 0}).to_list(100)
-    
     performance = []
     for sales_user in sales_users:
         user_id = sales_user["id"]
-        
         leads = await db.leads.find({"owner_id": user_id, "is_deleted": {"$ne": True}}, {"_id": 0}).to_list(10000)
         activities = await db.activities.count_documents({"user_id": user_id})
         meetings = await db.meetings.count_documents({"user_id": user_id})
-        
         closed_won = [l for l in leads if l.get("stage") == LeadStage.CLOSED_WON.value]
         closed_lost = [l for l in leads if l.get("stage") == LeadStage.CLOSED_LOST.value]
         total_closed = len(closed_won) + len(closed_lost)
-        
         revenue = sum(l.get("final_value") or l.get("estimated_value", 0) for l in closed_won)
         conversion = (len(closed_won) / total_closed * 100) if total_closed > 0 else 0
-        
         performance.append(SalespersonPerformance(
-            user_id=user_id,
-            user_name=sales_user["name"],
-            avatar_url=sales_user.get("avatar_url"),
-            leads_added=len(leads),
-            activities_logged=activities,
-            meetings_booked=meetings,
-            deals_closed=len(closed_won),
-            revenue_generated=revenue,
-            conversion_rate=round(conversion, 1)
+            user_id=user_id, user_name=sales_user["name"], avatar_url=sales_user.get("avatar_url"),
+            leads_added=len(leads), activities_logged=activities, meetings_booked=meetings,
+            deals_closed=len(closed_won), revenue_generated=revenue, conversion_rate=round(conversion, 1)
         ))
-    
     return sorted(performance, key=lambda x: x.revenue_generated, reverse=True)
 
 # ==================== REPORTS ROUTES ====================
 @api_router.get("/reports/leads")
-async def get_leads_report(
-    period: str = "week",  # day, week, month
-    user: dict = Depends(get_current_user)
-):
+async def get_leads_report(period: str = "week", user: dict = Depends(get_current_user)):
     now = datetime.now(timezone.utc)
     if period == "day":
         start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
     elif period == "week":
         start_date = now - timedelta(days=now.weekday())
         start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
-    else:  # month
+    else:
         start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    
     query = {"created_at": {"$gte": start_date.isoformat()}, "is_deleted": {"$ne": True}}
     if user["role"] == UserRole.SALES.value:
         query["owner_id"] = user["id"]
-
     leads = await db.leads.find(query, {"_id": 0}).to_list(10000)
-    
-    # Get leads by owner
     leads_by_owner = {}
     for lead in leads:
         owner_id = lead.get("owner_id")
@@ -1000,54 +863,35 @@ async def get_leads_report(
                 leads_by_owner[owner_id] = {"count": 0, "value": 0}
             leads_by_owner[owner_id]["count"] += 1
             leads_by_owner[owner_id]["value"] += lead.get("estimated_value", 0)
-    
-    # Get user names
     user_ids = list(leads_by_owner.keys())
     users = await db.users.find({"id": {"$in": user_ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(100)
     user_map = {u["id"]: u["name"] for u in users}
-    
-    report = []
-    for owner_id, data in leads_by_owner.items():
-        report.append({
-            "user_id": owner_id,
-            "user_name": user_map.get(owner_id, "Unknown"),
-            "leads_count": data["count"],
-            "total_value": data["value"]
-        })
-    
+    report = [
+        {"user_id": oid, "user_name": user_map.get(oid, "Unknown"),
+         "leads_count": d["count"], "total_value": d["value"]}
+        for oid, d in leads_by_owner.items()
+    ]
     return {
-        "period": period,
-        "start_date": start_date.isoformat(),
+        "period": period, "start_date": start_date.isoformat(),
         "total_leads": len(leads),
         "total_value": sum(l.get("estimated_value", 0) for l in leads),
         "by_user": sorted(report, key=lambda x: x["leads_count"], reverse=True)
     }
 
 @api_router.get("/reports/revenue")
-async def get_revenue_report(
-    period: str = "month",
-    user: dict = Depends(get_current_user)
-):
+async def get_revenue_report(period: str = "month", user: dict = Depends(get_current_user)):
     now = datetime.now(timezone.utc)
     if period == "day":
         start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
     elif period == "week":
         start_date = now - timedelta(days=now.weekday())
         start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
-    else:  # month
+    else:
         start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    
-    query = {
-        "stage": LeadStage.CLOSED_WON.value,
-        "updated_at": {"$gte": start_date.isoformat()},
-        "is_deleted": {"$ne": True}
-    }
+    query = {"stage": LeadStage.CLOSED_WON.value, "updated_at": {"$gte": start_date.isoformat()}, "is_deleted": {"$ne": True}}
     if user["role"] == UserRole.SALES.value:
         query["owner_id"] = user["id"]
-
     deals = await db.leads.find(query, {"_id": 0}).to_list(10000)
-    
-    # Get revenue by owner
     revenue_by_owner = {}
     for deal in deals:
         owner_id = deal.get("owner_id")
@@ -1056,63 +900,42 @@ async def get_revenue_report(
                 revenue_by_owner[owner_id] = {"count": 0, "revenue": 0}
             revenue_by_owner[owner_id]["count"] += 1
             revenue_by_owner[owner_id]["revenue"] += deal.get("final_value") or deal.get("estimated_value", 0)
-    
-    # Get user names
     user_ids = list(revenue_by_owner.keys())
     users = await db.users.find({"id": {"$in": user_ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(100)
     user_map = {u["id"]: u["name"] for u in users}
-    
-    report = []
-    for owner_id, data in revenue_by_owner.items():
-        report.append({
-            "user_id": owner_id,
-            "user_name": user_map.get(owner_id, "Unknown"),
-            "deals_closed": data["count"],
-            "revenue": data["revenue"]
-        })
-    
+    report = [
+        {"user_id": oid, "user_name": user_map.get(oid, "Unknown"),
+         "deals_closed": d["count"], "revenue": d["revenue"]}
+        for oid, d in revenue_by_owner.items()
+    ]
     total_revenue = sum(d.get("final_value") or d.get("estimated_value", 0) for d in deals)
-    
     return {
-        "period": period,
-        "start_date": start_date.isoformat(),
-        "total_deals": len(deals),
-        "total_revenue": total_revenue,
+        "period": period, "start_date": start_date.isoformat(),
+        "total_deals": len(deals), "total_revenue": total_revenue,
         "by_user": sorted(report, key=lambda x: x["revenue"], reverse=True)
     }
 
 @api_router.get("/reports/export")
-async def export_leads(
-    format: str = "csv",
-    user: dict = Depends(get_current_user)
-):
+async def export_leads(format: str = "csv", user: dict = Depends(get_current_user)):
     query = {"is_deleted": {"$ne": True}}
     if user["role"] == UserRole.SALES.value:
         query["owner_id"] = user["id"]
-
     leads = await db.leads.find(query, {"_id": 0}).to_list(10000)
-
-    # Get owner names
     user_ids = list(set(l.get("owner_id") for l in leads if l.get("owner_id")))
     users = await db.users.find({"id": {"$in": user_ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(100)
     user_map = {u["id"]: u["name"] for u in users}
-
     export_data = []
     for lead in leads:
         export_data.append({
-            "Company": lead.get("company_name"),
-            "Contact": lead.get("contact_name"),
-            "Email": lead.get("contact_email"),
-            "Phone": lead.get("contact_phone"),
-            "Stage": lead.get("stage"),
-            "Source": lead.get("source"),
+            "Company": lead.get("company_name"), "Contact": lead.get("contact_name"),
+            "Email": lead.get("contact_email"), "Phone": lead.get("contact_phone"),
+            "Stage": lead.get("stage"), "Source": lead.get("source"),
             "Owner": user_map.get(lead.get("owner_id"), ""),
             "Estimated Value": lead.get("estimated_value", 0),
             "Final Value": lead.get("final_value", ""),
             "Created": lead.get("created_at", "")[:10],
             "Updated": lead.get("updated_at", "")[:10]
         })
-    
     return {"data": export_data, "count": len(export_data)}
 
 # ==================== PIPELINE ROUTES ====================
@@ -1121,18 +944,11 @@ async def get_pipeline(user: dict = Depends(get_current_user)):
     query = {"is_deleted": {"$ne": True}}
     if user["role"] == UserRole.SALES.value:
         query["owner_id"] = user["id"]
-
     leads = await db.leads.find(query, {"_id": 0}).to_list(10000)
-
-    # Get owner names
     user_ids = list(set(l.get("owner_id") for l in leads if l.get("owner_id")))
     users = await db.users.find({"id": {"$in": user_ids}}, {"_id": 0, "id": 1, "name": 1, "avatar_url": 1}).to_list(100)
     user_map = {u["id"]: {"name": u["name"], "avatar_url": u.get("avatar_url")} for u in users}
-    
-    pipeline = {}
-    for stage in LeadStage:
-        pipeline[stage.value] = []
-    
+    pipeline = {stage.value: [] for stage in LeadStage}
     for lead in leads:
         stage = lead.get("stage", LeadStage.LEAD_IDENTIFIED.value)
         owner_info = user_map.get(lead.get("owner_id"), {})
@@ -1140,7 +956,6 @@ async def get_pipeline(user: dict = Depends(get_current_user)):
         lead["owner_avatar"] = owner_info.get("avatar_url")
         if stage in pipeline:
             pipeline[stage].append(lead)
-    
     return pipeline
 
 @api_router.put("/pipeline/{lead_id}/move")
@@ -1148,46 +963,30 @@ async def move_lead_in_pipeline(lead_id: str, stage: LeadStage, user: dict = Dep
     lead = await db.leads.find_one({"id": lead_id, "is_deleted": {"$ne": True}}, {"_id": 0})
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
-
     if user["role"] == UserRole.SALES.value and lead.get("owner_id") != user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
-
-    update_data = {
-        "stage": stage.value,
-        "updated_at": datetime.now(timezone.utc).isoformat()
-    }
-    
-    # Handle closed won
+    update_data = {"stage": stage.value, "updated_at": datetime.now(timezone.utc).isoformat()}
     if stage == LeadStage.CLOSED_WON:
         if not lead.get("final_value"):
             update_data["final_value"] = lead.get("estimated_value", 0)
-        
-        # Notify admin
         admins = await db.users.find({"role": UserRole.ADMIN.value}, {"_id": 0, "id": 1}).to_list(10)
         for admin in admins:
             await create_notification(
-                admin["id"],
-                NotificationType.DEAL_WON,
-                "Deal Closed Won!",
-                f"{lead['company_name']} deal closed by {user['name']}",
-                lead_id
+                admin["id"], NotificationType.DEAL_WON, "Deal Closed Won!",
+                f"{lead['company_name']} deal closed by {user['name']}", lead_id
             )
-    
     await db.leads.update_one({"id": lead_id}, {"$set": update_data})
-
-    # Award XP for stage update in pipeline
     old_stage = lead.get("stage")
     lead_owner_id = lead.get("owner_id") or user["id"]
     if stage.value != old_stage:
         await award_xp(lead_owner_id, "stage_updated", f"{lead_id}:{stage.value}")
     if stage == LeadStage.CLOSED_WON and old_stage != LeadStage.CLOSED_WON.value:
         await award_xp(lead_owner_id, "deal_closed", lead_id)
-
     return {"message": "Lead moved", "stage": stage.value}
 
 # ==================== DAILY REPORT ROUTES ====================
 class DailyReportCreate(BaseModel):
-    date: str  # YYYY-MM-DD
+    date: str
     calls_made: int = 0
     messages_sent: int = 0
     follow_ups_made: int = 0
@@ -1214,13 +1013,9 @@ class DailyReportResponse(BaseModel):
 async def upsert_daily_report(report: DailyReportCreate, user: dict = Depends(get_current_user)):
     now = datetime.now(timezone.utc).isoformat()
     existing = await db.daily_reports.find_one({"user_id": user["id"], "date": report.date}, {"_id": 0})
-
     if existing:
         update_data = {**report.model_dump(), "updated_at": now}
-        await db.daily_reports.update_one(
-            {"user_id": user["id"], "date": report.date},
-            {"$set": update_data}
-        )
+        await db.daily_reports.update_one({"user_id": user["id"], "date": report.date}, {"$set": update_data})
         updated = await db.daily_reports.find_one({"user_id": user["id"], "date": report.date}, {"_id": 0})
         return DailyReportResponse(**updated)
     else:
@@ -1237,16 +1032,12 @@ async def upsert_daily_report(report: DailyReportCreate, user: dict = Depends(ge
         return DailyReportResponse(**report_doc)
 
 @api_router.get("/daily-reports", response_model=List[DailyReportResponse])
-async def get_daily_reports(
-    date: Optional[str] = None,
-    user: dict = Depends(get_current_user)
-):
+async def get_daily_reports(date: Optional[str] = None, user: dict = Depends(get_current_user)):
     query = {}
     if user["role"] == UserRole.SALES.value:
         query["user_id"] = user["id"]
     if date:
         query["date"] = date
-
     reports = await db.daily_reports.find(query, {"_id": 0}).sort([("date", -1), ("user_name", 1)]).to_list(1000)
     return [DailyReportResponse(**r) for r in reports]
 
@@ -1256,10 +1047,7 @@ async def get_my_xp(user: dict = Depends(get_current_user)):
     user_doc = await db.users.find_one({"id": user["id"]}, {"_id": 0, "xp": 1, "level": 1})
     xp = user_doc.get("xp", 0) if user_doc else 0
     info = get_level_info(xp)
-    recent_events = await db.xp_events.find(
-        {"user_id": user["id"]},
-        {"_id": 0}
-    ).sort("created_at", -1).to_list(20)
+    recent_events = await db.xp_events.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(20)
     return {**info, "recent_events": recent_events}
 
 @api_router.get("/levels/leaderboard")
@@ -1269,12 +1057,7 @@ async def get_leaderboard(user: dict = Depends(get_current_user)):
     for u in users:
         xp = u.get("xp", 0)
         info = get_level_info(xp)
-        leaderboard.append({
-            "user_id": u["id"],
-            "name": u["name"],
-            "avatar_url": u.get("avatar_url"),
-            **info,
-        })
+        leaderboard.append({"user_id": u["id"], "name": u["name"], "avatar_url": u.get("avatar_url"), **info})
     leaderboard.sort(key=lambda x: x["xp"], reverse=True)
     for i, entry in enumerate(leaderboard):
         entry["rank"] = i + 1
