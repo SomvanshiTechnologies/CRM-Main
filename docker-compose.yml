@@ -35,7 +35,7 @@ services:
         - REACT_APP_BACKEND_URL=${REACT_APP_BACKEND_URL:-http://localhost:5000}
     restart: always
     ports:
-      - "3000:80"
+      - "3002:80"
     depends_on:
       - backend
     networks:
