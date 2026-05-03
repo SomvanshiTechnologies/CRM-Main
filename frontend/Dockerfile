@@ -11,7 +11,7 @@ COPY . .
 ARG REACT_APP_BACKEND_URL
 ENV REACT_APP_BACKEND_URL=$REACT_APP_BACKEND_URL
 
-RUN NODE_OPTIONS=--max-old-space-size=512 npm run build
+RUN NODE_OPTIONS=--max-old-space-size=1024 npm run build
 
 FROM nginx:alpine
 
